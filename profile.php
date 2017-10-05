@@ -1,6 +1,9 @@
 <?php
 include 'classes/DB.php';
 include 'classes/Login.php';
+include 'classes/Post.php';
+include 'classes/Image.php';
+include 'classes/Notify.php';
 
 $username = "";
 $verified = false;
@@ -52,52 +55,29 @@ if (isset($_GET['username'])) {
       $isFollowing = true;
     }
 
+    if (isset($_POST['deletepost'])) {
+
+      if (DB::query('SELECT id FROM posts WHERE id=:postid AND user_id=:userid', array(':postid'=>$_GET['postid'], ':userid'=>$followerid))) {
+        DB::query('DELETE FROM posts WHERE id=:postid AND user_id=:userid', array(':postid'=>$_GET['postid'], ':userid'=>$followerid));
+        DB::query('DELETE FROM post_likes WHERE post_id=:postid', array(':postid'=>$_GET['postid']));
+        echo "Post was deleted";
+      }
+    }
+
     if (isset($_POST['post'])) {
-      $postbody = $_POST['postbody'];
-      $loggedInUserId = Login::isLoggedIn();
-
-      if (strlen($postbody) > 160 || strlen($postbody) < 1) {
-        die('Too short or too long');
-      }
-
-      if ($loggedInUserId == $userid) {
-        DB::query('INSERT INTO posts VALUES (\'\', :postbody, NOW(), :userid, 0)', array(':postbody'=>$postbody, ':userid'=>$userid));
+      if ($_FILES['postimg']['size'] == 0) {
+        Post::createPost($_POST['postbody'], Login::isLoggedIn(), $userid);
       } else {
-        die('Incorrect user');
-      }
-
-    }
-
-    if (isset($_GET['postid'])) {
-
-      if (!DB::query('SELECT user_id FROM post_likes WHERE post_id=:postid AND user_id=:userid', array(':postid'=>$_GET['postid'], ':userid'=>$followerid))) {
-        DB::query('UPDATE posts SET likes=likes+1 WHERE id=:postid', array(':postid'=>$_GET['postid']));
-        DB::query('INSERT INTO post_likes VALUES (\'\', :postid, :userid)', array(':postid'=>$_GET['postid'], ':userid'=>$followerid));
-      } else {
-        DB::query('UPDATE posts SET likes=likes-1 WHERE id=:postid', array(':postid'=>$_GET['postid']));
-        DB::query('DELETE FROM post_likes WHERE post_id=:postid AND user_id=:userid', array(':postid'=>$_GET['postid'], ':userid'=>$followerid));
+        $postid = Post::createImgPost($_POST['postbody'], Login::isLoggedIn(), $userid);
+        Image::uploadImage('postimg', "UPDATE posts SET postimg=:postimg WHERE id=:postid", array(':postid'=>$postid));
       }
     }
 
-    $dbposts = DB::query('SELECT * FROM posts WHERE user_id=:userid ORDER BY id DESC', array(':userid'=>$userid));
-    $posts = "";
-    foreach ($dbposts as $p) {
-
-      if (!DB::query('SELECT post_id FROM post_likes WHERE post_id=:postid AND user_id=:userid', array(':postid'=>$p['id'], ':userid'=>$followerid))) {
-        $posts .= htmlspecialchars($p['body'])."
-          <form action='profile.php?username=$username&postid=".$p['id']."' method='post'>
-            <button type='submit' name='like'>Like</button>
-            <span>".$p['likes']." likes</span>
-          </form><hr /></br />";
-      } else {
-        $posts .= htmlspecialchars($p['body'])."
-          <form action='profile.php?username=$username&postid=".$p['id']."' method='post'>
-            <button type='submit' name='dislike'>Dislike</button>
-            <span>".$p['likes']." likes</span>
-          </form><hr /></br />";
-      }
-
+    if (isset($_GET['postid']) && !isset($_POST['deletepost'])) {
+      Post::likePost($_GET['postid'], $followerid);
     }
+
+    $posts = Post::displayPosts($userid, $username, $followerid);
 
   } else {
     die('User not found');
@@ -118,8 +98,12 @@ if (isset($_GET['username'])) {
   }
    ?>
 </form>
-<form action="profile.php?username=<?php echo $username; ?>" method="post">
+
+<form action="profile.php?username=<?php echo $username; ?>" method="post" enctype="multipart/form-data">
   <textarea name="postbody" rows="8" cols="80"></textarea>
+  <br />Upload an image:
+  <input type="file" name="postimg">
+  <button type="submit" name="uploadprofileimg">Upload image</button>
   <button type="submit" name="post">Post</button>
 </form>
 
