@@ -1,5 +1,6 @@
 <?php
 include 'classes/DB.php';
+include 'classes/Mail.php';
 
 if (isset($_POST['createaccount'])) {
   $username = $_POST['username'];
@@ -20,6 +21,7 @@ if (isset($_POST['createaccount'])) {
 
               DB::query('INSERT INTO users VALUES (\'\',:username, :password, :email, \'0\', \'\')', array(':username'=>$username,
                         ':password'=>password_hash($password, PASSWORD_BCRYPT),':email'=>$email));
+                        Mail::sendMail('Welcome', 'Your accont has been created', $email);
                         echo "Success!";
             } else {
               echo "Email is already taken";
